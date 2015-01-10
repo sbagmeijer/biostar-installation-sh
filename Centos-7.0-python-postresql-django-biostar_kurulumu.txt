@@ -1,0 +1,252 @@
+CENTOS CONSOLE:
+------------------------
+
+- setlocale: LC_CTYPE config:
+$ sudo vi /etc/environment
+
+add this:
+
+LANG=en_US.utf-8
+LC_ALL=en_US.utf-8
+
+
+POSTGRESQL:
+-----------
+
+$ sudo yum install postgresql postgresql-server postgresql-devel postgresql-contrib -y
+$ sudo postgresql-setup initdb # init db
+$ sudo chkconfig postgresql on #-> auto start service after reboot
+$ sudo systemctl start postgresql.service # service start
+$ sudo -u postgres psql template1
+template1=# CREATE USER user_name WITH ENCRYPTED PASSWORD 'password';
+template1=# CREATE DATABASE database_name;
+template1=# GRANT ALL PRIVILEGES ON DATABASE database_name TO user_name;
+template1=# \q
+
+$ sudo vi /var/lib/pgsql/data/pg_hba.conf 
+	# add this line... and comment out others...
+	# TYPE  DATABASE        USER            ADDRESS                 METHOD
+	local   all             all                                     md5
+	host    all             all             127.0.0.1/32            md5
+	host    all             all             ::1/128                 md5
+	
+
+$ sudo systemctl restart postgresql.service
+$ psql -U user_name
+	Password for user user_name:
+
+user_name=> \list # list databases
+user_name=> \dt # list tables
+user_name=> \c database_name # changing database
+
+
+
+PYTHON & VIRTUALENV: 
+--------------------
+
+$ sudo easy_install pip
+$ sudo pip install virtualenv
+$ virtualenv python-2.7-django
+$ source python-2.7-django/bin/activate
+
+
+DEVELOPMENT & COMPILE:
+---------------------
+
+$ sudo yum groupinstall 'Development Tools'
+
+
+BIOSTAR-CENTRAL INSTALL:
+------------------------
+
+$ git clone https://github.com/ialbert/biostar-central.git project_name
+$ source python-2.7-django/bin/activate
+$ cd project_name
+$ pip install --upgrade -r conf/requirements/base.txt
+$ source conf/defaults.env
+$ ./biostar.sh init import run # for test...
+
+
+
+BIOSTAR-CENTRAL DEPLOYMENT:
+---------------------------
+
+$ sudo yum install python-devel -y  # for psycopg  compile...
+$ source python-2.7-django/bin/activate
+$ cd project_name
+$ pip install -r conf/requirements/deploy.txt
+$ ./biostart.sh init import
+
+- deployment configuration for live
+
+$ touch live/__init__.py
+$ mkdir live/deploy
+$ touch live/deploy/__init__.py
+$ cp conf/defaults.env live/deploy/deploy.env
+$ touch live/deploy/deploy.py
+
+$ vi live/deploy/deploy.env
+	# The hostname for the development server.
+	export BIOSTAR_HOSTNAME="127.0.0.1:8080"
+	# The django module to use.
+	export DJANGO_SETTINGS_MODULE=live.deploy.deploy
+	# This will be either the Sqlite or the Postgres database name.
+	export DATABASE_NAME="biostar_db"
+	
+$ vi live/deploy/deploy.py
+	from biostar.settings.base import *  # first line of deploy.py 
+
+	# Turn off debug mode on deployed servers.
+	DEBUG = False
+	# Should the django compressor be used.
+	USE_COMPRESSOR = True
+	# Local time zone for this installation. Choices can be found here:
+	# http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
+	# although not all choices may be available on all operating systems.
+	# In a Windows environment this must be set to your system time zone.
+	TIME_ZONE = 'Europe/Istanbul'
+
+	# Language code for this installation. All choices can be found here:
+	# http://www.i18nguy.com/unicode/language-identifiers.html
+	LANGUAGE_CODE = 'tr'
+	
+	ALLOWED_HOSTS.append(u'your_domain')
+	
+	DATABASES = {
+	    'default': {
+	        # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+	        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+	        'NAME': 'biostar_db',
+	        'USER': 'biostar_user',
+	        'PASSWORD': 'biostar@12!',
+	        'HOST': 'localhost',
+	        'PORT': '5432',
+	    }
+	}
+	
+$ ./biostar.sh waitress  # external_ip:8080 for test
+
+- lessc install
+
+$ sudo curl -sL https://rpm.nodesource.com/setup | sudo bash -
+$ sudo yum install nodejs npm
+$ sudo npm install -g less
+
+- install nginx server
+
+$ sudo vi /etc/yum.repos.d/nginx.repo
+	[nginx]
+	name=nginx repo
+	baseurl=http://nginx.org/packages/centos/$releasever/$basearch/
+	gpgcheck=0
+	enabled=1
+$ sudo yum install nginx
+$ sudo chkconfig nginx on
+
+- supervisord installing without virtualenv
+
+$ sudo pip install supervisor
+$ echo_supervisord_conf > supervisord.conf
+$ sudo cp supervisord.conf /etc/supervisord.conf
+$ sudo mkdir /etc/supervisord.d/
+
+$ sudo vi /etc/supervisord.conf
+	[include]
+	files = /etc/supervisord.d/*.conf
+
+$ sudo vi /etc/rc.d/init.d/supervisord
+	#!/bin/sh
+	#
+	# /etc/rc.d/init.d/supervisord
+	#
+	# Supervisor is a client/server system that
+	# allows its users to monitor and control a
+	# number of processes on UNIX-like operating
+	# systems.
+	#
+	# chkconfig: - 64 36
+	# description: Supervisor Server
+	# processname: supervisord
+
+	# Source init functions
+	. /etc/rc.d/init.d/functions
+
+	prog="supervisord"
+
+	prefix="/usr/"
+	exec_prefix="${prefix}"
+	prog_bin="${exec_prefix}/bin/supervisord"
+	PIDFILE="/var/run/$prog.pid"
+
+	start()
+	{
+	       echo -n $"Starting $prog: "
+	       daemon $prog_bin --pidfile $PIDFILE
+	       [ -f $PIDFILE ] && success $"$prog startup" || failure $"$prog startup"
+	       echo
+	}
+
+	stop()
+	{
+	       echo -n $"Shutting down $prog: "
+	       [ -f $PIDFILE ] && killproc $prog || success $"$prog shutdown"
+	       echo
+	}
+
+	case "$1" in
+
+	 start)
+	   start
+	 ;;
+
+	 stop)
+	   stop
+	 ;;
+
+	 status)
+	       status $prog
+	 ;;
+
+	 restart)
+	   stop
+	   start
+	 ;;
+
+	 *)
+	   echo "Usage: $0 {start|stop|restart|status}"
+	 ;;
+
+	esac
+
+$ sudo chmod +x /etc/rc.d/init.d/supervisord
+$ sudo chkconfig --add supervisord
+$ sudo chkconfig supervisord on
+$ sudo service supervisord start
+
+- server configurations...
+
+$ cp conf/server/* live/deploy/
+
+- change paths in biostar.nginx.conf
+
+$ sudo ln -fs /home/user_name/biostar-central/live/deploy/biostar.nginx.conf /etc/nginx/conf.d/nginx.conf
+
+- cahange paths in biostar.supervisor.conf
+
+$ sudo ln -fs /home/user_name/biostar-central/live/deploy/biostar.supervisor.conf /etc/supervisord.d/
+
+- cahange paths in gunicorn, celery confs
+
+
+
+
+
+
+
+REFERANCES:
+-----------
+1- http://www.cyberciti.biz/faq/howto-add-postgresql-user-account/
+2- https://help.ubuntu.com/10.04/serverguide/postgresql.html
+3- http://biostar-central.readthedocs.org/en/latest/install.html
+4- http://biostar-central.readthedocs.org/en/latest/deploy.html
+5- https://rayed.com/wordpress/?p=1496
