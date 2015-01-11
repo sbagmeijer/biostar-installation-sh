@@ -88,6 +88,7 @@ sudo cp celery.worker.sh /var/www/qa/core/live/btsorucevap/deploy/
 
 #init
 sudo /bin/sh -c 'source  /var/www/qa/core/live/btsorucevap/deploy/deploy.env && /var/www/qa/core/biostar.sh init migrate'
+sudo /bin/sh -c 'source  /var/www/qa/core/live/btsorucevap/deploy/deploy.env && python /var/www/qa/core/manage.py syncdb --all'
 
 #
 sudo chown -R nginx:nginx /var/www/qa
